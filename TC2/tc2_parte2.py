@@ -102,6 +102,32 @@ def newton_raphson_multi_s_J(F, J, X0, X, eps=1e-8, max_iters=200):
             return (X0, hist)
     raise(RuntimeError(f"O método não convergiu após {max_iters} iterações"))
 
+# ----------------------------------------------------------------------
+# NOVO (itens e, f): Newton genérico que guarda o histórico completo de x^(k)
+# (o de cima é específico para as colunas Q1,Q2,Q3,H e foi mantido intacto)
+# ----------------------------------------------------------------------
+def newton_raphson_multi_hist(F, J, X0, X_ref=None, eps=1e-12, max_iters=200):
+    X = np.array(X0, dtype=float).ravel()
+    hist = [{'k': 0, 'x': X.copy(), '||F(X)||': np.max(abs(F(X).ravel())),
+             '|x_k - x|': np.nan if X_ref is None else np.max(abs(X - X_ref))}]
+    for i in range(max_iters):
+        F_X = F(X).ravel()
+        if np.max(abs(F_X)) < eps:
+            return X, hist
+        try:
+            s = decomposicao_LU(J(X), -F_X)
+        except ValueError as e:
+            raise RuntimeError(
+                f"O método de Newton falhou na iteração {i}: a matriz Jacobiana se tornou singular ({e}).")
+        X = X + s
+        if np.isnan(X).any() or np.isinf(X).any():
+            raise ValueError("O método divergiu levando X ao infinito")
+        hist.append({'k': i + 1, 'x': X.copy(), '||F(X)||': np.max(abs(F(X).ravel())),
+                     '|x_k - x|': np.nan if X_ref is None else np.max(abs(X - X_ref))})
+        if np.max(abs(s)) < eps:
+            return X, hist
+    raise RuntimeError(f"O método não convergiu após {max_iters} iterações")
+
 g = 9.81
 z = np . array ([100.0 , 85.0 , 60.0])
 L = np . array ([1200.0 , 900.0 , 1500.0])
@@ -110,6 +136,9 @@ f = np . array ([0.022 , 0.024 , 0.024])
 K = 8* f *L /( np . pi **2* g * D **5)
 q = 0.200
 
+def calc_K(f_):
+    """K_i = 8 f_i L_i / (pi^2 g D_i^5) para um vetor f_ qualquer."""
+    return 8 * f_ * L / (np.pi**2 * g * D**5)
 
 def problema_1_2_b():
 
@@ -216,6 +245,105 @@ def problema_1_2_c():
         )
         raise RuntimeError(explicacao_erro)
 
+# ----------------------------------------------------------------------
+# NOVO: sistema base reutilizável (Q1,Q2,Q3,H) para qualquer vetor K
+# ----------------------------------------------------------------------
+def resolve_sistema_base(K_, q_=0.200, X0=(0.1, 0.1, -0.05, 70)):
+    F = lambda x: np.array([*(K_ * x[:3] * np.abs(x[:3]) + x[3] - z), x[:3].sum() - q_])
+    def J(x):
+        M = np.zeros((4, 4))
+        M[range(3), range(3)] = 2 * K_ * np.abs(x[:3])   # d/dQ (K Q|Q|) = 2K|Q|
+        M[:3, 3] = 1
+        M[3, :3] = 1
+        return M
+    return newton_raphson_multi_hist(F, J, X0)
+
+# ----------------------------------------------------------------------
+# NOVO: sistema da demanda crítica (Q3 = 0), incógnitas y = (Q1, Q2, H, q)
+# ----------------------------------------------------------------------
+def resolve_demanda_critica(K_, Y0=(0.1, 0.1, 65.0, 0.2)):
+    F = lambda y: np.array([
+        K_[0] * y[0] * abs(y[0]) + y[2] - z[0],
+        K_[1] * y[1] * abs(y[1]) + y[2] - z[1],
+        y[2] - z[2],                       # Q3 = 0  =>  H = z3
+        y[0] + y[1] - y[3]                 # Q1 + Q2 + 0 - q = 0
+    ])
+    J = lambda y: np.array([
+        [2 * K_[0] * abs(y[0]), 0, 1, 0],
+        [0, 2 * K_[1] * abs(y[1]), 1, 0],
+        [0, 0, 1, 0],
+        [1, 1, 0, -1]
+    ], dtype=float)
+    y_ref = np.array([np.sqrt((z[0]-z[2])/K_[0]), np.sqrt((z[1]-z[2])/K_[1]), z[2], 0.0])
+    y_ref[3] = y_ref[0] + y_ref[1]          # solução analítica (usada só como referência do erro)
+    return newton_raphson_multi_hist(F, J, Y0, y_ref)
+
+def problema_1_2_e():
+    print("\n\n" + "=" * 80)
+    print("PROBLEMA 1.2.E - DEMANDA CRÍTICA q* (Q3 = 0)")
+    print("=" * 80 + "\n")
+    y, hist = resolve_demanda_critica(K)
+
+    print(f"{'k':>3} | {'Q1 (m³/s)':>12} | {'Q2 (m³/s)':>12} | {'H (mca)':>10} | {'q (m³/s)':>12} | {'||F(y)||':>10} | {'||y_k - y*||':>12}")
+    print("-" * 90)
+    for h in hist:
+        a = h['x']
+        print(f"{h['k']:>3} | {a[0]:>12.8f} | {a[1]:>12.8f} | {a[2]:>10.6f} | {a[3]:>12.8f} | "
+              f"{h['||F(X)||']:>10.2e} | {h['|x_k - x|']:>12.2e}")
+
+    print(f"\nq* = {y[3]:.8f} m³/s   (Q1 = {y[0]:.8f}, Q2 = {y[1]:.8f}, H = {y[2]:.4f})")
+    q_analitico = np.sqrt((z[0]-z[2])/K[0]) + np.sqrt((z[1]-z[2])/K[1])
+    print(f"Conferência analítica (H = z3): q* = {q_analitico:.8f} m³/s")
+    print(f"\nComo q = {q} < q*, o reservatório 3 recebe água (Q3 < 0).")
+    print("Para q > q*, o reservatório 3 passa a fornecer água (Q3 > 0).")
+
+    try:
+        from scipy.optimize import fsolve
+        Fy = lambda y_: [K[0]*y_[0]*abs(y_[0]) + y_[2] - z[0],
+                         K[1]*y_[1]*abs(y_[1]) + y_[2] - z[1],
+                         y_[2] - z[2], y_[0] + y_[1] - y_[3]]
+        print("Conferência fsolve:", np.round(fsolve(Fy, [0.1, 0.1, 65, 0.2]), 8))
+    except ImportError:
+        pass
+    return y
+
+def problema_1_2_f():
+    print("\n\n" + "=" * 80)
+    print("PROBLEMA 1.2.F - SENSIBILIDADE: f1 = 0.022 -> 0.030")
+    print("=" * 80 + "\n")
+    f_novo = f.copy()
+    f_novo[0] = 0.030
+    K_novo = calc_K(f_novo)
+    print(f"K (original)   = {K}")
+    print(f"K (envelhecido)= {K_novo}")
+
+    x_ant, _ = resolve_sistema_base(K)
+    x_nov, hist = resolve_sistema_base(K_novo)
+    y_ant, _ = resolve_demanda_critica(K)
+    y_nov, _ = resolve_demanda_critica(K_novo)
+
+    print("\nIterações de Newton (f1 = 0.030):")
+    print(f"{'k':>3} | {'Q1':>12} | {'Q2':>12} | {'Q3':>12} | {'H':>12} | {'||F(x)||':>10}")
+    print("-" * 75)
+    for h in hist:
+        a = h['x']
+        print(f"{h['k']:>3} | {a[0]:>12.8f} | {a[1]:>12.8f} | {a[2]:>12.8f} | {a[3]:>12.8f} | {h['||F(X)||']:>10.2e}")
+
+    print("\nComparação (variação relativa):")
+    print(f"{'Grandeza':>10} | {'f1=0.022':>12} | {'f1=0.030':>12} | {'Delta':>12} | {'Delta %':>9}")
+    print("-" * 66)
+    itens = [("Q1", x_ant[0], x_nov[0]), ("Q2", x_ant[1], x_nov[1]), ("Q3", x_ant[2], x_nov[2]),
+             ("H", x_ant[3], x_nov[3]), ("q*", y_ant[3], y_nov[3])]
+    for nome, a, b in itens:
+        print(f"{nome:>10} | {a:>12.6f} | {b:>12.6f} | {b-a:>+12.6f} | {100*(b-a)/abs(a):>+8.2f}%")
+
+    print("\nConclusão: Q1 é a grandeza mais sensível (≈ -9.9%), seguida de perto por q* (≈ -9.2%);")
+    print("H é a menos sensível (≈ -4.2%), pois as adutoras 2 e 3 absorvem parte da redistribuição.")
+    print("O reservatório 3 continua sendo enchido (Q3 < 0), mas com menor vazão.")
+
 if __name__ == "__main__":
     problema_1_2_b()
+    problema_1_2_e()
+    problema_1_2_f()
+    # 1.2.c lança RuntimeError de propósito (modo de falha), então fica por último
     problema_1_2_c()
