@@ -160,5 +160,62 @@ def problema_1_2_b():
     print("também dobra. Isso confirma empiricamente a convergência")
     print("quadrática característica do Método de Newton-Raphson.")
 
+def problema_1_2_c():
+    """
+    PROBLEMA 1.2.C - Análise da Singularidade do Jacobiano para x^(0) = (0, 0, 0, 70)
+    e Interrupção por Exceção (raise).
+    """
+    print("\n\n" + "=" * 80)
+    print("PROBLEMA 1.2.C - ANÁLISE DE SINGULARIDADE NO PONTO x^(0) = (0, 0, 0, 70)")
+    print("=" * 80 + "\n")
+
+    # 1. Ponto inicial considerado
+    X0_singular = np.array([0.0, 0.0, 0.0, 70.0])
+    Q1_0, Q2_0, Q3_0, H_0 = X0_singular
+
+    print(f"Ponto inicial considerado: x^(0) = (Q1={Q1_0}, Q2={Q2_0}, Q3={Q3_0}, H={H_0})")
+
+    # 2. Matriz Jacobiana avaliada em x^(0)
+    # Como Q1 = Q2 = Q3 = 0, d_i = 2 * k_i * |Q_i| = 0 para i=1,2,3
+    J_num_0 = np.array([
+        [2 * K[0] * abs(Q1_0), 0, 0, 1],
+        [0, 2 * K[1] * abs(Q2_0), 0, 1],
+        [0, 0, 2 * K[2] * abs(Q3_0), 1],
+        [1, 1, 1, 0]
+    ], dtype=float)
+
+    print("\nMatriz Jacobiana J(x^(0)):")
+    print(J_num_0)
+
+    # 3. Cálculo do Determinante
+    det_num = np.linalg.det(J_num_0)
+    print(f"\nDeterminante calculado: det(J(x^(0))) = {det_num}")
+
+    # 4. Avaliação do vetor F(x^(0))
+    F_num_0 = np.array([
+        K[0] * Q1_0 * abs(Q1_0) + H_0 - z[0],
+        K[1] * Q2_0 * abs(Q2_0) + H_0 - z[1],
+        K[2] * Q3_0 * abs(Q3_0) + H_0 - z[2],
+        Q1_0 + Q2_0 + Q3_0 - q
+    ], dtype=float)
+    neg_F_0 = -F_num_0
+
+    # 5. Emissão direta da exceção com a explicação fundamentada
+    if abs(det_num) < 1e-12:
+        explicacao_erro = (
+            f"\n\nFALHA NO MÉTODO DE NEWTON NO PONTO x^(0) = (0, 0, 0, 70):\n"
+            f"1. O determinante da matriz Jacobiana é nulo: det(J(x^(0))) = {det_num}.\n"
+            f"2. Estrutura de Linhas: As três primeiras linhas de J(x^(0)) são idênticas:\n"
+            f"   L1 = L2 = L3 = [0, 0, 0, 1], o que torna o Jacobiano singular e não-invertível.\n"
+            f"3. Inconsistência do Sistema Linear J(x^(0)) * dx = -F(x^(0)):\n"
+            f"   - Linha 1 exige: 1 * dH = {neg_F_0[0]} => dH = {neg_F_0[0]}\n"
+            f"   - Linha 2 exige: 1 * dH = {neg_F_0[1]} => dH = {neg_F_0[1]}\n"
+            f"   - Linha 3 exige: 1 * dH = {neg_F_0[2]} => dH = {neg_F_0[2]}\n"
+            f"   Como o sistema exige três valores conflitantes para dH, ele é IMPOSSÍVEL.\n"
+            f"Portanto, o Método de Newton falha logo na primeira iteração (pivô nulo)."
+        )
+        raise RuntimeError(explicacao_erro)
+
 if __name__ == "__main__":
     problema_1_2_b()
+    problema_1_2_c()

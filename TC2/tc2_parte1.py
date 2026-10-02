@@ -229,6 +229,41 @@ def newton_raphson_multi(F, X0, eps=1e-8, max_iters=200):
             return X0
     raise(RuntimeError(f"O método não convergiu após {max_iters} iterações"))
 
+    
+def problema_1():
+    
+    print('\n\n\nPROBLEMA 1\n')
+#Dedução da matriz: 
+    # X1: Ciência = R$16.000.000, 70% de 4000 = 2800, 20% de 1000 = 200, 10% de 2000 = 200
+    # X2: Engenharia = R$5.000.000, 10% de 4000 = 400, 90% de 1000 = 900, 0% de 2000 = 0
+    # X3: C. Computação = R$8.000.000, 15% de 4000 = 600, 10% de 1000 = 100, 75% de 2000 = 1500
+        #ficamos com essa matriz
+        #|2800 200 200  ! 16.000.000 |
+        #|400  900 0    ! 5.000.000  |
+        #|600  100 1500 ! 8.000.000  |
+        # dividindo tudo por 100...
+
+    A = np.array ([
+        [28, 2, 2],
+        [4, 9, 0],
+        [6, 1, 15]
+    ])
+    
+    b = np.array([
+        160000,
+        50000,
+        80000
+    ])
+    
+    g, custo_g = eliminacao_gauss(A, b)
+    X1, X2, X3 = g
+
+    print('Eliminação de Gauss')
+    print(f'custo em flops (floating point operations): {custo_g["flops"]}\n')
+    print(f'O custo por estudante de Ciência é: R$ {X1:.2f}')
+    print(f'O custo por estudante de Engenharia é: R$ {X2:.2f}')
+    print(f'O custo por estudante de C. Computação é: R$ {X3:.2f}\n')
+
 def problema_2():
     print('\n\n\nPROBLEMA 2\n')
     n = 4
@@ -300,5 +335,6 @@ def problema_4():
     print(f'Resultado do metodo = {newton_raphson_multi(F, X0, eps=1e-5)}')
 
 if __name__ == "__main__":
+    problema_1()
     problema_2()
     problema_4()
